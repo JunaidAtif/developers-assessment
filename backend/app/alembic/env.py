@@ -19,7 +19,8 @@ fileConfig(config.config_file_name)
 # target_metadata = None
 
 from app.models import SQLModel  # noqa
-from app.core.config import settings # noqa
+from app.core.config import settings  # noqa
+from app.api.routes.financial import models as _financial_models  # noqa  — register tables with metadata
 
 target_metadata = SQLModel.metadata
 

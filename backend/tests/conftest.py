@@ -4,6 +4,13 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlmodel import Session, delete
 
+from app.api.routes.financial.models import (
+    Adjustment,
+    Remittance,
+    RemittanceItem,
+    TimeSegment,
+    WorkLog,
+)
 from app.core.config import settings
 from app.core.db import engine, init_db
 from app.main import app
@@ -17,6 +24,11 @@ def db() -> Generator[Session, None, None]:
     with Session(engine) as session:
         init_db(session)
         yield session
+        session.execute(delete(RemittanceItem))
+        session.execute(delete(Adjustment))
+        session.execute(delete(Remittance))
+        session.execute(delete(TimeSegment))
+        session.execute(delete(WorkLog))
         statement = delete(Item)
         session.execute(statement)
         statement = delete(User)

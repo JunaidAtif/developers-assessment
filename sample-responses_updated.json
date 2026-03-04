@@ -1,0 +1,305 @@
+{
+  "_meta": {
+    "generated_at": "2026-03-04T17:27:30.131193Z",
+    "superuser": "admin@example.com",
+    "hourly_rate": 30.0,
+    "amount_formula": "duration_minutes / 60 * hourly_rate",
+    "seed": {
+      "wl1_task": "Feature: Auth Module",
+      "wl1_segments": "120 min (60.0) + 90 min (45.0) = 105.0",
+      "wl2_task": "Bug: Payment Gateway",
+      "wl2_segments": "150 min (75.0)",
+      "adjustment": "+15.0 quality bonus",
+      "grand_total": 195.0
+    }
+  },
+  "scenarios": [
+    {
+      "scenario": "01_list_all_worklogs_before_settlement",
+      "request": {
+        "method": "GET",
+        "url": "http://localhost:8000/api/v1/financial/list-all-worklogs",
+        "params": null
+      },
+      "response": {
+        "status_code": 200,
+        "body": {
+          "data": [
+            {
+              "id": "31c18471-c5a9-44da-b367-18302acca180",
+              "user_id": "319c37f9-cb79-4d2a-a560-245de5056996",
+              "task_name": "Feature: Auth Module",
+              "total_amount": 105.0,
+              "settled_amount": 0.0,
+              "outstanding_amount": 105.0,
+              "created_at": "2026-03-04T17:27:29.254897"
+            },
+            {
+              "id": "91f41af4-6284-497f-b176-a89ae6d8b603",
+              "user_id": "319c37f9-cb79-4d2a-a560-245de5056996",
+              "task_name": "Bug: Payment Gateway",
+              "total_amount": 75.0,
+              "settled_amount": 0.0,
+              "outstanding_amount": 75.0,
+              "created_at": "2026-03-04T17:27:29.357432"
+            }
+          ],
+          "count": 2
+        }
+      }
+    },
+    {
+      "scenario": "02_list_unremitted_before_settlement",
+      "request": {
+        "method": "GET",
+        "url": "http://localhost:8000/api/v1/financial/list-all-worklogs",
+        "params": {
+          "remittanceStatus": "UNREMITTED"
+        }
+      },
+      "response": {
+        "status_code": 200,
+        "body": {
+          "data": [
+            {
+              "id": "31c18471-c5a9-44da-b367-18302acca180",
+              "user_id": "319c37f9-cb79-4d2a-a560-245de5056996",
+              "task_name": "Feature: Auth Module",
+              "total_amount": 105.0,
+              "settled_amount": 0.0,
+              "outstanding_amount": 105.0,
+              "created_at": "2026-03-04T17:27:29.254897"
+            },
+            {
+              "id": "91f41af4-6284-497f-b176-a89ae6d8b603",
+              "user_id": "319c37f9-cb79-4d2a-a560-245de5056996",
+              "task_name": "Bug: Payment Gateway",
+              "total_amount": 75.0,
+              "settled_amount": 0.0,
+              "outstanding_amount": 75.0,
+              "created_at": "2026-03-04T17:27:29.357432"
+            }
+          ],
+          "count": 2
+        }
+      }
+    },
+    {
+      "scenario": "03_list_remitted_before_settlement",
+      "request": {
+        "method": "GET",
+        "url": "http://localhost:8000/api/v1/financial/list-all-worklogs",
+        "params": {
+          "remittanceStatus": "REMITTED"
+        }
+      },
+      "response": {
+        "status_code": 200,
+        "body": {
+          "data": [],
+          "count": 0
+        }
+      }
+    },
+    {
+      "scenario": "04_generate_remittances_first_run",
+      "request": {
+        "method": "POST",
+        "url": "http://localhost:8000/api/v1/financial/generate-remittances-for-all-users",
+        "params": null
+      },
+      "response": {
+        "status_code": 201,
+        "body": {
+          "data": [
+            {
+              "id": "3daa2902-7dc7-40a0-b5ad-43cc3f5e8216",
+              "user_id": "319c37f9-cb79-4d2a-a560-245de5056996",
+              "period_start": "2026-03-01T00:00:00",
+              "period_end": "2026-03-04T17:27:29.597794",
+              "total_amount": 195.0,
+              "status": "SUCCESS",
+              "created_at": "2026-03-04T17:27:29.597794"
+            }
+          ],
+          "count": 1
+        }
+      }
+    },
+    {
+      "scenario": "05_generate_remittances_second_run_idempotent",
+      "request": {
+        "method": "POST",
+        "url": "http://localhost:8000/api/v1/financial/generate-remittances-for-all-users",
+        "params": null
+      },
+      "response": {
+        "status_code": 201,
+        "body": {
+          "data": [],
+          "count": 0
+        }
+      }
+    },
+    {
+      "scenario": "06_list_all_worklogs_after_settlement",
+      "request": {
+        "method": "GET",
+        "url": "http://localhost:8000/api/v1/financial/list-all-worklogs",
+        "params": null
+      },
+      "response": {
+        "status_code": 200,
+        "body": {
+          "data": [
+            {
+              "id": "31c18471-c5a9-44da-b367-18302acca180",
+              "user_id": "319c37f9-cb79-4d2a-a560-245de5056996",
+              "task_name": "Feature: Auth Module",
+              "total_amount": 105.0,
+              "settled_amount": 105.0,
+              "outstanding_amount": 0.0,
+              "created_at": "2026-03-04T17:27:29.254897"
+            },
+            {
+              "id": "91f41af4-6284-497f-b176-a89ae6d8b603",
+              "user_id": "319c37f9-cb79-4d2a-a560-245de5056996",
+              "task_name": "Bug: Payment Gateway",
+              "total_amount": 75.0,
+              "settled_amount": 75.0,
+              "outstanding_amount": 0.0,
+              "created_at": "2026-03-04T17:27:29.357432"
+            }
+          ],
+          "count": 2
+        }
+      }
+    },
+    {
+      "scenario": "07_list_remitted_after_settlement",
+      "request": {
+        "method": "GET",
+        "url": "http://localhost:8000/api/v1/financial/list-all-worklogs",
+        "params": {
+          "remittanceStatus": "REMITTED"
+        }
+      },
+      "response": {
+        "status_code": 200,
+        "body": {
+          "data": [
+            {
+              "id": "31c18471-c5a9-44da-b367-18302acca180",
+              "user_id": "319c37f9-cb79-4d2a-a560-245de5056996",
+              "task_name": "Feature: Auth Module",
+              "total_amount": 105.0,
+              "settled_amount": 105.0,
+              "outstanding_amount": 0.0,
+              "created_at": "2026-03-04T17:27:29.254897"
+            },
+            {
+              "id": "91f41af4-6284-497f-b176-a89ae6d8b603",
+              "user_id": "319c37f9-cb79-4d2a-a560-245de5056996",
+              "task_name": "Bug: Payment Gateway",
+              "total_amount": 75.0,
+              "settled_amount": 75.0,
+              "outstanding_amount": 0.0,
+              "created_at": "2026-03-04T17:27:29.357432"
+            }
+          ],
+          "count": 2
+        }
+      }
+    },
+    {
+      "scenario": "08_list_unremitted_after_settlement",
+      "request": {
+        "method": "GET",
+        "url": "http://localhost:8000/api/v1/financial/list-all-worklogs",
+        "params": {
+          "remittanceStatus": "UNREMITTED"
+        }
+      },
+      "response": {
+        "status_code": 200,
+        "body": {
+          "data": [],
+          "count": 0
+        }
+      }
+    },
+    {
+      "scenario": "09_list_invalid_filter_400",
+      "request": {
+        "method": "GET",
+        "url": "http://localhost:8000/api/v1/financial/list-all-worklogs",
+        "params": {
+          "remittanceStatus": "INVALID"
+        }
+      },
+      "response": {
+        "status_code": 400,
+        "body": {
+          "detail": "remittanceStatus must be REMITTED or UNREMITTED"
+        }
+      }
+    },
+    {
+      "scenario": "10_new_segment_added_after_settlement_rule3",
+      "note": "A new 90-min APPROVED segment (45.0) was inserted directly into wl1 to demonstrate Rule 3.",
+      "segment_amount": 45.0
+    },
+    {
+      "scenario": "11_list_unremitted_after_new_segment_rule3",
+      "request": {
+        "method": "GET",
+        "url": "http://localhost:8000/api/v1/financial/list-all-worklogs",
+        "params": {
+          "remittanceStatus": "UNREMITTED"
+        }
+      },
+      "response": {
+        "status_code": 200,
+        "body": {
+          "data": [
+            {
+              "id": "31c18471-c5a9-44da-b367-18302acca180",
+              "user_id": "319c37f9-cb79-4d2a-a560-245de5056996",
+              "task_name": "Feature: Auth Module",
+              "total_amount": 150.0,
+              "settled_amount": 105.0,
+              "outstanding_amount": 45.0,
+              "created_at": "2026-03-04T17:27:29.254897"
+            }
+          ],
+          "count": 1
+        }
+      }
+    },
+    {
+      "scenario": "12_generate_remittances_delta_run_rule3",
+      "request": {
+        "method": "POST",
+        "url": "http://localhost:8000/api/v1/financial/generate-remittances-for-all-users",
+        "params": null
+      },
+      "response": {
+        "status_code": 201,
+        "body": {
+          "data": [
+            {
+              "id": "b5832128-87bf-4b15-bbe7-5b89cd9bc57b",
+              "user_id": "319c37f9-cb79-4d2a-a560-245de5056996",
+              "period_start": "2026-03-01T00:00:00",
+              "period_end": "2026-03-04T17:27:30.075849",
+              "total_amount": 45.0,
+              "status": "SUCCESS",
+              "created_at": "2026-03-04T17:27:30.075849"
+            }
+          ],
+          "count": 1
+        }
+      }
+    }
+  ]
+}

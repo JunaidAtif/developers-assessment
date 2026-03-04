@@ -1,0 +1,171 @@
+// ============================================================
+// Financial Domain – Ledger-Based DBML Schema
+// ============================================================
+//
+// Design Philosophy
+// -----------------
+// Work is mutable.
+// Payments are immutable snapshots.
+// Outstanding balance is always derived at query time.
+//
+// Financial correctness is achieved by:
+//
+//   total      = SUM(time_segment.duration_minutes / 60 * user.hourly_rate)
+//                WHERE time_segment.status = 'APPROVED'
+//
+//   settled    = SUM(remittance_item.amount)
+//                JOIN remittance WHERE remittance.status = 'SUCCESS'
+//
+//   outstanding = total - settled
+//
+// No cumulative "paid" field is stored on worklog or user.
+// No historical remittance_item is ever modified or deleted.
+// FAILED, CANCELLED, and PROCESSING remittances do not affect balances.
+// Adjustments are audit-safe: once consumed they are marked CONSUMED
+//   (not deleted or overwritten).
+//
+// ============================================================
+
+
+// ------------------------------------------------------------
+// user  (auth table – extended with hourly_rate)
+// ------------------------------------------------------------
+
+Table user {
+  id               uuid      [pk, note: "UUID v4 primary key"]
+  email            varchar   [not null, unique, note: "Login email"]
+  is_active        boolean   [not null, default: true]
+  is_superuser     boolean   [not null, default: false]
+  full_name        varchar   [null]
+  hashed_password  varchar   [not null]
+  hourly_rate      float     [not null, default: 0, note: "Rate used to calculate segment amounts: duration_minutes / 60 * hourly_rate"]
+
+  Note: "Standard auth user extended with hourly_rate for financial calculations."
+}
+
+
+// ------------------------------------------------------------
+// worklog
+// ------------------------------------------------------------
+
+Table worklog {
+  id          uuid      [pk, note: "UUID v4 primary key"]
+  user_id     uuid      [not null, ref: > user.id, note: "Worker who owns this task container"]
+  task_name   varchar   [not null, note: "Human-readable name of the task work was logged against"]
+
+  created_at  timestamp [not null, default: `now()`]
+
+  indexes {
+    user_id    [name: "ix_worklog_user_id"]
+    task_name  [name: "ix_worklog_task_name"]
+    created_at [name: "ix_worklog_created_at"]
+  }
+
+  Note: "Task container. Stores NO financial state. Amount, settled, and outstanding are all derived from time_segment rows at query time."
+}
+
+
+// ------------------------------------------------------------
+// time_segment
+// ------------------------------------------------------------
+
+Table time_segment {
+  id                uuid      [pk, note: "UUID v4 primary key"]
+  worklog_id        uuid      [not null, ref: > worklog.id, note: "The WorkLog this segment belongs to"]
+  user_id           uuid      [not null, ref: > user.id, note: "Denormalised for fast per-user queries during settlement"]
+
+  start_time        timestamp [not null, note: "When this segment started"]
+  end_time          timestamp [not null, note: "When this segment ended"]
+  duration_minutes  float     [not null, note: "Stored duration (end_time - start_time in minutes). Used for amount calculation."]
+
+  status            varchar   [not null, default: 'PENDING', note: "PENDING | APPROVED | DECLINED. Only APPROVED segments are eligible for settlement."]
+
+  created_at        timestamp [not null, default: `now()`]
+  updated_at        timestamp [not null, default: `now()`]
+
+  indexes {
+    worklog_id  [name: "ix_time_segment_worklog_id"]
+    user_id     [name: "ix_time_segment_user_id"]
+    status      [name: "ix_time_segment_status"]
+    created_at  [name: "ix_time_segment_created_at"]
+  }
+
+  Note: "Core mutable unit of reported work. Financial correctness is preserved via remittance_item snapshots, not by locking this row. The row can be updated; what has already been paid is captured in remittance_item."
+}
+
+
+// ------------------------------------------------------------
+// remittance
+// ------------------------------------------------------------
+
+Table remittance {
+  id            uuid      [pk, note: "UUID v4 primary key"]
+  user_id       uuid      [not null, ref: > user.id, note: "Worker who receives this payout"]
+
+  period_start  timestamp [not null, note: "Start of the settlement window (first day of current month at midnight)"]
+  period_end    timestamp [not null, note: "End of the settlement window (timestamp of settlement run)"]
+
+  total_amount  float     [not null, note: "Sum of all remittance_item.amount rows plus consumed adjustments"]
+
+  status        varchar   [not null, default: 'PENDING', note: "PENDING | PROCESSING | SUCCESS | FAILED | CANCELLED. Only SUCCESS entries affect settled balances. PROCESSING means items are being written; a crash here is safely retryable."]
+
+  created_at    timestamp [not null, default: `now()`]
+
+  indexes {
+    user_id    [name: "ix_remittance_user_id"]
+    status     [name: "ix_remittance_status"]
+    created_at [name: "ix_remittance_created_at"]
+  }
+
+  Note: "Represents a single payout attempt. The PENDING → PROCESSING → SUCCESS state machine (Rule 5) ensures that a crash mid-write leaves the remittance in PROCESSING — visible in the ledger but never counted as paid."
+}
+
+
+// ------------------------------------------------------------
+// remittance_item
+// ------------------------------------------------------------
+
+Table remittance_item {
+  id               uuid      [pk, note: "UUID v4 primary key"]
+  remittance_id    uuid      [not null, ref: > remittance.id, note: "Parent remittance"]
+  time_segment_id  uuid      [not null, ref: > time_segment.id, note: "Snapshot link to the specific segment that was paid"]
+
+  amount           float     [not null, note: "Amount paid for this segment in this remittance: duration_minutes / 60 * hourly_rate (rate snapshotted at settlement time)"]
+
+  created_at       timestamp [not null, default: `now()`]
+
+  indexes {
+    remittance_id    [name: "ix_remittance_item_remittance_id"]
+    time_segment_id  [name: "ix_remittance_item_time_segment_id"]
+  }
+
+  Note: "Immutable ledger entry. One row per (remittance, time_segment) pair. The set of time_segment_ids present in remittance_items under SUCCESS remittances is the single source of truth for 'has this segment been paid?' (Rule 2 + Rule 3)."
+}
+
+
+// ------------------------------------------------------------
+// adjustment
+// ------------------------------------------------------------
+
+Table adjustment {
+  id               uuid      [pk, note: "UUID v4 primary key"]
+  user_id          uuid      [not null, ref: > user.id, note: "Worker this adjustment applies to"]
+  time_segment_id  uuid      [null, ref: > time_segment.id, note: "Optional: links adjustment to a specific segment for audit purposes"]
+  worklog_id       uuid      [null, ref: > worklog.id, note: "Optional: links adjustment to a specific worklog for audit purposes"]
+
+  amount           float     [not null, note: "Signed amount. Positive = bonus, Negative = deduction. Added to remittance total in the next settlement run."]
+  reason           varchar   [not null, note: "Human-readable explanation of why the adjustment was made"]
+
+  status           varchar   [not null, default: 'PENDING', note: "PENDING | APPROVED | DECLINED | CONSUMED. CONSUMED means included in a SUCCESS remittance. Original data is never overwritten — full audit trail is preserved."]
+
+  created_at       timestamp [not null, default: `now()`]
+
+  indexes {
+    user_id          [name: "ix_adjustment_user_id"]
+    status           [name: "ix_adjustment_status"]
+    time_segment_id  [name: "ix_adjustment_time_segment_id"]
+    worklog_id       [name: "ix_adjustment_worklog_id"]
+  }
+
+  Note: "Additive and retroactive (Rule 4). APPROVED adjustments are included in the next settlement run and marked CONSUMED — never deleted or set to DECLINED. This preserves a complete, immutable audit trail."
+}
